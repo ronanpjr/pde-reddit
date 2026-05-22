@@ -44,8 +44,10 @@ def extract_text(image_path: str) -> str:
     Returns an empty string on any failure so the partition keeps running.
     """
     try:
+        # Spark binaryFile reader returns 'file://' URIs. Strip protocols so EasyOCR/OpenCV can open them locally.
+        local_path = image_path.replace("file://", "").replace("file:", "")
         reader = get_reader()
-        results = reader.readtext(image_path, detail=0)
+        results = reader.readtext(local_path, detail=0)
         return " ".join(results).strip()
     except Exception:
         return ""
