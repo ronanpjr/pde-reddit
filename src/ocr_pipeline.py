@@ -27,8 +27,14 @@ _reader = None
 def get_reader() -> easyocr.Reader:
     global _reader
     if _reader is None:
-        # gpu=True uses whichever device CUDA_VISIBLE_DEVICES points to
-        _reader = easyocr.Reader(["en"], gpu=True, verbose=False)
+        # Use shared model storage and disable automatic downloads inside parallel Spark workers
+        _reader = easyocr.Reader(
+            ["en"],
+            gpu=True,
+            download_enabled=False,
+            model_storage_directory="/workspace/data/easyocr_models",
+            verbose=False
+        )
     return _reader
 
 
