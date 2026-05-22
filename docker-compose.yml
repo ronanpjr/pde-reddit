@@ -4,19 +4,17 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      - ~/reddit-meme-analysis/notebooks:/workspace/notebooks
-      - ~/reddit-meme-analysis/src:/workspace/src
-      - ~/reddit-meme-analysis/data:/workspace/data
+      - ~/pde-reddit/notebooks:/workspace/notebooks
+      - ~/pde-reddit/src:/workspace/src
+      - ~/pde-reddit/data:/workspace/data
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     command: >
-      jupyter lab --ip=0.0.0.0 --port=8888
-      --no-browser --allow-root
-      --NotebookApp.token='pde2026'
+      jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='pde2026'
 
   spark-master:
     build: .
@@ -24,87 +22,82 @@ services:
       - "8080:8080"
       - "7077:7077"
     volumes:
-      - ~/reddit-meme-analysis/data:/workspace/data
+      - ~/pde-reddit/data:/workspace/data
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-master.sh
-      && tail -f /dev/null"
+      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-master.sh && tail -f /dev/null"
 
   spark-worker-1:
     build: .
-    depends_on: [spark-master]
+    depends_on: [ spark-master ]
     environment:
       - SPARK_WORKER_CORES=8
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
     volumes:
-      - ~/reddit-meme-analysis/data:/workspace/data
+      - ~/pde-reddit/data:/workspace/data
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']
-              capabilities: [gpu]
+              device_ids: [ '0' ]
+              capabilities: [ gpu ]
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh
-      spark://spark-master:7077 && tail -f /dev/null"
+      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
 
   spark-worker-2:
     build: .
-    depends_on: [spark-master]
+    depends_on: [ spark-master ]
     environment:
       - SPARK_WORKER_CORES=8
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
     volumes:
-      - ~/reddit-meme-analysis/data:/workspace/data
+      - ~/pde-reddit/data:/workspace/data
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['1']
-              capabilities: [gpu]
+              device_ids: [ '1' ]
+              capabilities: [ gpu ]
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh
-      spark://spark-master:7077 && tail -f /dev/null"
+      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
 
   spark-worker-3:
     build: .
-    depends_on: [spark-master]
+    depends_on: [ spark-master ]
     environment:
       - SPARK_WORKER_CORES=8
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
     volumes:
-      - ~/reddit-meme-analysis/data:/workspace/data
+      - ~/pde-reddit/data:/workspace/data
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['2']
-              capabilities: [gpu]
+              device_ids: [ '2' ]
+              capabilities: [ gpu ]
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh
-      spark://spark-master:7077 && tail -f /dev/null"
+      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
 
   spark-worker-4:
     build: .
-    depends_on: [spark-master]
+    depends_on: [ spark-master ]
     environment:
       - SPARK_WORKER_CORES=8
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
     volumes:
-      - ~/reddit-meme-analysis/data:/workspace/data
+      - ~/pde-reddit/data:/workspace/data
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['3']
-              capabilities: [gpu]
+              device_ids: [ '3' ]
+              capabilities: [ gpu ]
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh
-      spark://spark-master:7077 && tail -f /dev/null"
+      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
