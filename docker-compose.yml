@@ -24,7 +24,7 @@ services:
     volumes:
       - ~/pde-reddit/data:/workspace/data
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-master.sh && tail -f /dev/null"
+      bash -c "start-master.sh && tail -f /dev/null"
 
   spark-worker-1:
     build: .
@@ -43,7 +43,7 @@ services:
               device_ids: [ '0' ]
               capabilities: [ gpu ]
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
+      bash -c "start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
 
   spark-worker-2:
     build: .
@@ -62,7 +62,7 @@ services:
               device_ids: [ '1' ]
               capabilities: [ gpu ]
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
+      bash -c "start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
 
   spark-worker-3:
     build: .
@@ -81,7 +81,7 @@ services:
               device_ids: [ '2' ]
               capabilities: [ gpu ]
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
+      bash -c "start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
 
   spark-worker-4:
     build: .
@@ -100,4 +100,4 @@ services:
               device_ids: [ '3' ]
               capabilities: [ gpu ]
     command: >
-      bash -c "/opt/conda/lib/python3.10/site-packages/pyspark/sbin/start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
+      bash -c "start-worker.sh spark://spark-master:7077 && tail -f /dev/null"
