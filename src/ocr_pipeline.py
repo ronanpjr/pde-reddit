@@ -98,6 +98,14 @@ def run_pipeline(images_dir: str, metadata_path: str, output_path: str) -> None:
     #    change the `on` parameter below accordingly.
     # ------------------------------------------------------------------
     df_meta = spark.read.csv(metadata_path, header=True, inferSchema=True)
+    if "Filename" in df_meta.columns:
+        df_meta = df_meta.withColumnRenamed("Filename", "filename")
+        
+    # Drop 'Subreddit' column from metadata to prevent ambiguous column reference error during write
+    for col_name in df_meta.columns:
+        if col_name.lower() == "subreddit":
+            df_meta = df_meta.drop(col_name)
+            
     df_final = df_ocr.join(df_meta, on="filename", how="left")
 
     # ------------------------------------------------------------------
@@ -113,6 +121,6 @@ def run_pipeline(images_dir: str, metadata_path: str, output_path: str) -> None:
 if __name__ == "__main__":
     run_pipeline(
         images_dir="/workspace/data/images",
-        metadata_path="/workspace/data/metadata_consolidated.csv",
+        metadata_path="/workspace/data/metadata/memes_metadata.csv",
         output_path="/workspace/data/output/ocr_results",
     )
