@@ -4,9 +4,11 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      - ~/pde-reddit/notebooks:/workspace/notebooks
-      - ~/pde-reddit/src:/workspace/src
-      - ~/pde-reddit/data:/workspace/data
+      - ./notebooks:/workspace/notebooks
+      - ./src:/workspace/src
+      - ./data:/workspace/data
+      - ./scripts:/workspace/scripts
+      - ./assets:/workspace/assets
     deploy:
       resources:
         reservations:
@@ -22,7 +24,7 @@ services:
       - "8080:8080"
       - "7077:7077"
     volumes:
-      - ~/pde-reddit/data:/workspace/data
+      - ./data:/workspace/data
     command: >
       bash -c "start-master.sh && tail -f /dev/null"
 
@@ -34,7 +36,8 @@ services:
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
     volumes:
-      - ~/pde-reddit/data:/workspace/data
+      - ./data:/workspace/data
+      - ./src:/workspace/src
     deploy:
       resources:
         reservations:
@@ -53,7 +56,8 @@ services:
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
     volumes:
-      - ~/pde-reddit/data:/workspace/data
+      - ./data:/workspace/data
+      - ./src:/workspace/src
     deploy:
       resources:
         reservations:
@@ -72,7 +76,8 @@ services:
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
     volumes:
-      - ~/pde-reddit/data:/workspace/data
+      - ./data:/workspace/data
+      - ./src:/workspace/src
     deploy:
       resources:
         reservations:
@@ -91,7 +96,8 @@ services:
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
     volumes:
-      - ~/pde-reddit/data:/workspace/data
+      - ./data:/workspace/data
+      - ./src:/workspace/src
     deploy:
       resources:
         reservations:

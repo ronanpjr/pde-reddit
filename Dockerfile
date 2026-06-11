@@ -36,4 +36,5 @@ RUN pip install --no-cache-dir \
 WORKDIR /workspace
 # Copy source and install as package so Spark workers can import modules
 COPY src /workspace/src
+COPY setup.py /workspace/setup.py
 RUN pip install --no-cache-dir /workspace
