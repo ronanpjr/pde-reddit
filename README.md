@@ -21,9 +21,12 @@ O pipeline aplica diversos modelos de *deep learning* e visão computacional de 
 ## 📂 Estrutura principal do projeto
 
 * `src/feature_helpers.py` — *Singletons* e funções de inferência encapsuladas (YOLO, EasyOCR, FER, color stats, embeddings).
-* `src/feature_pipeline.py` — O *job* do Spark que orquestra a extração por imagem e grava os resultados em formato `features_raw_parquet` (JSON aninhado por imagem).
+* `src/feature_pipeline_stage_a.py` — Etapa A do *job* Spark: YOLO + FER + estatísticas de cor + salvamento de *crops* em disco (sem OCR/BERT).
+* `src/feature_pipeline_stage_b.py` — Etapa B do *job* Spark: OCR (EasyOCR) + *embeddings* textuais (Sentence-Transformers) a partir da saída da Etapa A.
+* `src/feature_pipeline.py` — Pipeline monolítico legado (mantido para compatibilidade, não recomendado para execução principal).
 * `src/feature_postprocess.py` — Responsável por processar o JSON bruto, gerando uma tabela normalizada com uma linha por detecção (`features.parquet`).
-* `scripts/run_feature_pipeline.py` — Script mestre para submissão simplificada do *job*.
+* `scripts/run_two_stage_pipeline.py` — Script orquestrador recomendado: executa Etapa A e depois Etapa B com controle de recursos de GPU.
+* `scripts/run_feature_pipeline.py` — Script legado para submissão simplificada do pipeline monolítico.
 * `scripts/preload_models.py` — Script de execução única (*one-shot*) para pré-carregar os modelos na máquina física, evitando gargalos de *download* concorrente nos *workers*.
 * `notebooks/entrega_2.ipynb` — *Notebook* de demonstração conceitual da disciplina (prova de conceito executável no Colab/Jupyter).
 
@@ -53,26 +56,68 @@ docker compose exec jupyter python scripts/preload_models.py
 
 *Este comando preencherá o diretório `/workspace/data/easyocr_models` e fará o cache do Sentence-Transformers.*
 
-### Passo 2: Execução do job Spark
+### Passo 2: Execução do pipeline em duas etapas (recomendado)
 
-Você pode disparar o processamento paralelo de duas formas:
-
-**Opção A — Script mestre (simplificado):**
+Recomendação operacional para evitar OOM: iniciar com menos GPUs na Etapa A (YOLO/FER) e escalar na Etapa B (OCR/BERT).
 
 ```bash
-docker compose exec jupyter python scripts/run_feature_pipeline.py
+docker compose exec jupyter python scripts/run_two_stage_pipeline.py \
+  --model_name yolov5n \
+  --stage_a_gpus 2 \
+  --stage_b_gpus 4 \
+  --stage_b_repartition 16
 ```
 
-**Opção B — Spark-Submit direto (recomendado para o cluster):**
+*Saídas desta etapa:* 
+* Etapa A (intermediário): `/workspace/data/output/features/stage_a_raw_parquet`
+* *Crops* salvos: `/workspace/data/output/crops`
+* Etapa B (JSON bruto para pós-processamento): `/workspace/data/output/features/features_raw_parquet`
+
+### Passo 2.1 (opcional): execução manual por etapa
+
+Use apenas para *debug* fino ou controle manual de cada fase.
+
+**Etapa A — YOLO + FER + cor + crops (2 GPUs):**
+
+```bash
+docker compose exec jupyter spark-submit --master spark://spark-master:7077 \
+  --conf spark.cores.max=16 \
+  --conf spark.executor.cores=8 \
+  --conf spark.executor.memory=24g \
+  src/feature_pipeline_stage_a.py \
+  --images_dir /workspace/data/images \
+  --output_path /workspace/data/output/features \
+  --model_name yolov5n \
+  --crops_root /workspace/data/output/crops
+```
+
+**Etapa B — OCR + BERT (4 GPUs, somente após Etapa A finalizar):**
+
+```bash
+docker compose exec jupyter spark-submit --master spark://spark-master:7077 \
+  --conf spark.cores.max=32 \
+  --conf spark.executor.cores=8 \
+  --conf spark.executor.memory=24g \
+  src/feature_pipeline_stage_b.py \
+  --stage_a_input /workspace/data/output/features/stage_a_raw_parquet \
+  --output_path /workspace/data/output/features \
+  --easyocr_model_dir /workspace/data/easyocr_models \
+  --repartition 16
+```
+
+### Passo 2.2 (legado): pipeline monolítico
+
+Disponível para compatibilidade, mas menos estável em memória GPU.
 
 ```bash
 docker compose exec jupyter spark-submit --master spark://spark-master:7077 src/feature_pipeline.py \
   --images_dir /workspace/data/images \
   --metadata_path /workspace/data/metadata_consolidated.csv \
-  --output_path /workspace/data/output/features
+  --output_path /workspace/data/output/features \
+  --model_name yolov5n
 ```
 
-*Saída gerada:* Um arquivo Parquet com uma linha por imagem, contendo uma coluna `features_json` com a lista de detecções e atributos `-> /workspace/data/output/features/features_raw_parquet`
+*Saída bruta (JSON por imagem):* `/workspace/data/output/features/features_raw_parquet`
 
 ### Passo 3: Pós-processamento (normalização de dados)
 
@@ -90,7 +135,8 @@ docker compose exec jupyter python src/feature_postprocess.py \
 
 * **Otimização do EasyOCR:** Mantenha a configuração `download_enabled=False` no ambiente de produção após realizar o Passo 1 (pré-carregamento).
 * **Monitoramento:** Acompanhe a saúde do *cluster*, distribuição de tarefas e alocação de memória acessando a **Spark UI** em `http://localhost:8080`.
-* **Gerenciamento de memória (OOM na GPU):** Caso os *workers* apresentem falta de VRAM, reduza o tamanho máximo dos *crops* processados de uma vez ou altere a inferência de *embeddings* temporariamente para a CPU.
+* **Estratégia de memória recomendada:** Execute primeiro Etapa A (YOLO/FER) e somente depois Etapa B (OCR/BERT), começando com 2 GPUs na Etapa A e escalando para 4 GPUs na Etapa B.
+* **Gerenciamento de memória (OOM na GPU):** Se houver OOM, mantenha `yolov5n`, reduza `spark.cores.max`, e execute a Etapa B com menor paralelismo (`--stage_b_repartition` menor) antes de escalar novamente.
 * **Escalabilidade de embeddings:** Os *embeddings* atuais estão embutidos nos JSONs como listas de *floats*. Para aplicações em produção de altíssima escala, recomenda-se externalizá-los em arquivos `.npz` e manter apenas as referências (*pointers*) no Parquet.
 
 ### Checklist pré-execução
