@@ -1,6 +1,14 @@
 # Pipeline distribuído de extração de features em memes
 
-Este repositório contém a infraestrutura e a implementação de um *job* Apache Spark focado no processamento de um *dataset* em larga escala de memes (imagens). O objetivo da arquitetura é paralelizar a extração multimodal de *features* visuais e textuais para posterior análise estatística e modelagem preditiva de viralidade.
+![Python](https://img.shields.io/badge/Python-3.10-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Apache Spark](https://img.shields.io/badge/Apache%20Spark-3.5.1-E25A1C?style=for-the-badge&logo=apachespark&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.3.1-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![CUDA](https://img.shields.io/badge/CUDA-12.1-76B900?style=for-the-badge&logo=nvidia&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+
+> **📚 Artigo base:** Sah, T., & Jordan, K. (2025). *Decoding reddit memes virality*. International Journal of Data Science and Analytics, 20:5321-5336. https://doi.org/10.1007/s41060-025-00772-5
+
+Este repositório contém a infraestrutura e a implementação de um *job* Apache Spark focado no processamento de um *dataset* em larga escala de memes (imagens). O objetivo da arquitetura é paralelizar a extração multimodal de *features* visuais e textuais para posterior análise estatística e modelagem preditiva de viralidade, fundamentado nos conceitos do artigo supracitado.
 
 ## 🔢 Features extraídas
 O pipeline aplica diversos modelos de *deep learning* e visão computacional de forma distribuída:
