@@ -40,6 +40,7 @@ services:
       - SPARK_WORKER_CORES=8
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/workspace:/workspace/src
     volumes:
       - ./data:/workspace/data
       - ./src:/workspace/src
@@ -62,6 +63,7 @@ services:
       - SPARK_WORKER_CORES=8
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/workspace:/workspace/src
     volumes:
       - ./data:/workspace/data
       - ./src:/workspace/src
@@ -84,6 +86,7 @@ services:
       - SPARK_WORKER_CORES=8
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/workspace:/workspace/src
     volumes:
       - ./data:/workspace/data
       - ./src:/workspace/src
@@ -106,6 +109,7 @@ services:
       - SPARK_WORKER_CORES=8
       - SPARK_WORKER_MEMORY=28g
       - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/workspace:/workspace/src
     volumes:
       - ./data:/workspace/data
       - ./src:/workspace/src
