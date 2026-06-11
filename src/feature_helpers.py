@@ -18,10 +18,40 @@ def get_yolo(model_name: str = "yolov5s"):
     global _yolo
     if _yolo is None:
         # lazy import to avoid heavy imports at module load in driver
-        from yolov5 import load as yolo_load
+        # Try to support multiple YOLO loaders / package APIs (yolov5, ultralytics, etc.)
+        try:
+            # yolov5 python package exposes load
+            from yolov5 import load as yolo_load
+            try:
+                _yolo = yolo_load(model_name, pretrained=True)
+            except TypeError:
+                # older/newer API may not accept pretrained kwarg
+                _yolo = yolo_load(model_name)
+        except Exception:
+            try:
+                # ultralytics package uses YOLO class
+                from ultralytics import YOLO
 
-        _yolo = yolo_load(model_name, pretrained=True)
-        _yolo.conf = 0.25
+                try:
+                    _yolo = YOLO(model_name)
+                except TypeError:
+                    # some wrappers expect weights=...
+                    _yolo = YOLO(weights=model_name)
+            except Exception:
+                # Could not load any YOLO implementation; leave _yolo as None
+                _yolo = None
+                try:
+                    print(f"[feature_helpers] WARNING: failed to import yolov5 or ultralytics YOLO for model_name='{model_name}'.")
+                except Exception:
+                    pass
+
+        # If model loaded, tune default confidence
+        if _yolo is not None:
+            try:
+                _yolo.conf = 0.25
+            except Exception:
+                # some model objects don't expose conf attribute
+                pass
     return _yolo
 
 
@@ -65,6 +95,13 @@ def read_image_local(path: str) -> Optional[np.ndarray]:
 def run_yolo_on_image(img_or_path: Any, model_name: str = "yolov5s") -> List[Dict[str, Any]]:
     """Return list of detection dicts: label, conf, bbox (x1,y1,x2,y2) and crop (numpy BGR)"""
     model = get_yolo(model_name)
+    if model is None:
+        # YOLO failed to load; inform and return no detections
+        try:
+            print(f"[feature_helpers] INFO: YOLO model not available for model_name='{model_name}'. Skipping object detection for this image.")
+        except Exception:
+            pass
+        return []
     # accept path or numpy
     if isinstance(img_or_path, str):
         results = model(img_or_path)
