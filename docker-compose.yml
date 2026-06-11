@@ -105,8 +105,6 @@ services:
     volumes:
       - ./data:/workspace/data
       - ./src:/workspace/src
-    environment:
-      - PYTHONPATH=/workspace:/workspace/src
     deploy:
       resources:
         reservations:
