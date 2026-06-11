@@ -23,6 +23,14 @@ RUN pip install --no-cache-dir \
     pandas \
     pyarrow \
     torch \
-    torchvision
+    torchvision \
+    sentence-transformers \
+    yolov5 \
+    fer \
+    opencv-python-headless \
+    pillow \
+    tqdm \
+    matplotlib \
+    mtcnn
 
 WORKDIR /workspace

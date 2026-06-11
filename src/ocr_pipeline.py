@@ -16,6 +16,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf, col, regexp_extract
 from pyspark.sql.types import StringType
 import easyocr
+import traceback
 
 # ---------------------------------------------------------------------------
 # Module-level singleton: initialized once per worker process, reused across
@@ -41,7 +42,7 @@ def get_reader() -> easyocr.Reader:
 def extract_text(image_path: str) -> str:
     """
     Run EasyOCR on a single image and return extracted text as one string.
-    Returns an empty string on any failure so the partition keeps running.
+    Returns the traceback details on error to help debug cluster-level failures.
     """
     try:
         # Spark binaryFile reader returns 'file://' URIs. Strip protocols so EasyOCR/OpenCV can open them locally.
@@ -49,8 +50,8 @@ def extract_text(image_path: str) -> str:
         reader = get_reader()
         results = reader.readtext(local_path, detail=0)
         return " ".join(results).strip()
-    except Exception:
-        return ""
+    except Exception as e:
+        return f"ERROR: {str(e)}\n{traceback.format_exc()}"
 
 
 extract_text_udf = udf(extract_text, StringType())
