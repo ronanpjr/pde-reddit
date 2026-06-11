@@ -16,52 +16,70 @@ _text_model = None
 
 def get_yolo(model_name: str = "yolov5s"):
     global _yolo
-    if _yolo is None:
-        # Deterministic loader: prefer ultralytics, otherwise try yolov5.load
-        loaded = False
+    if _yolo is not None:
+        return _yolo
+
+    # Try ultralytics first, with sensible fallbacks for shorthand names
+    try:
+        from ultralytics import YOLO
         try:
-            # Prefer ultralytics if available
-            from ultralytics import YOLO
-
-            try:
-                _yolo = YOLO(model_name)
-            except TypeError:
-                _yolo = YOLO(weights=model_name)
+            _yolo = YOLO(model_name)
             print(f"[feature_helpers] Loaded ultralytics YOLO for '{model_name}'")
-            loaded = True
-        except Exception:
-            # ultralytics not available or failed; try yolov5.load with signature check
+        except Exception as e_ul:
+            # If loading failed (often because model_name is not a file/format ultralytics expects),
+            # try appending .pt or mapping common short names to weight filenames.
+            tried = False
             try:
-                from yolov5 import load as yolo_load
-                import inspect
-
-                try:
-                    sig = inspect.signature(yolo_load)
-                    if 'pretrained' in sig.parameters:
-                        try:
-                            _yolo = yolo_load(model_name, pretrained=True)
-                        except Exception:
-                            # fallback to calling without the kwarg
-                            _yolo = yolo_load(model_name)
-                    else:
-                        _yolo = yolo_load(model_name)
-                    print(f"[feature_helpers] Loaded yolov5 loader for '{model_name}'")
-                    loaded = True
-                except Exception as e_sig:
-                    print(f"[feature_helpers] WARNING: yolov5.load signature/call failed: {e_sig}")
-            except Exception as e_y5:
-                print(f"[feature_helpers] WARNING: yolov5 import failed: {e_y5}")
-
-        if not loaded:
-            _yolo = None
-            print(f"[feature_helpers] WARNING: could not load any YOLO implementation for '{model_name}'. YOLO features will be skipped.")
-
-        # tune default confidence where supported
-        if _yolo is not None:
-            try:
-                _yolo.conf = 0.25
+                alt = model_name if model_name.endswith('.pt') else model_name + '.pt'
+                _yolo = YOLO(alt)
+                print(f"[feature_helpers] Loaded ultralytics YOLO for '{alt}' (fallback from '{model_name}')")
+                tried = True
             except Exception:
                 pass
+
+            if not tried:
+                shorthand_map = {'yolov5s': 'yolov5s.pt', 'yolov5m': 'yolov5m.pt', 'yolov5l': 'yolov5l.pt'}
+                if model_name in shorthand_map:
+                    try:
+                        mapped = shorthand_map[model_name]
+                        _yolo = YOLO(mapped)
+                        print(f"[feature_helpers] Loaded ultralytics YOLO for '{mapped}' (mapped from '{model_name}')")
+                    except Exception as e_map:
+                        print(f"[feature_helpers] ultralytics fallback mapping failed: {e_map}")
+                else:
+                    print(f"[feature_helpers] ultralytics YOLO import succeeded but loading '{model_name}' failed: {e_ul}")
+    except Exception:
+        # ultralytics not installed or import failed — continue to next option
+        _yolo = None
+
+    # If ultralytics didn't yield a model, try yolov5.load with signature check
+    if _yolo is None:
+        try:
+            from yolov5 import load as yolo_load
+            import inspect
+            try:
+                sig = inspect.signature(yolo_load)
+                if 'pretrained' in sig.parameters:
+                    try:
+                        _yolo = yolo_load(model_name, pretrained=True)
+                    except Exception:
+                        _yolo = yolo_load(model_name)
+                else:
+                    _yolo = yolo_load(model_name)
+                print(f"[feature_helpers] Loaded yolov5 loader for '{model_name}'")
+            except Exception as e_sig:
+                print(f"[feature_helpers] WARNING: yolov5.load signature/call failed: {e_sig}")
+        except Exception as e_y5:
+            print(f"[feature_helpers] WARNING: yolov5 import failed: {e_y5}")
+
+    if _yolo is None:
+        print(f"[feature_helpers] WARNING: could not load any YOLO implementation for '{model_name}'. YOLO features will be skipped.")
+    else:
+        try:
+            _yolo.conf = 0.25
+        except Exception:
+            pass
+
     return _yolo
 
 
