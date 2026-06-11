@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir \
     torch \
     torchvision \
     sentence-transformers \
+    tf-keras \
     yolov5 \
     fer \
     opencv-python-headless \
