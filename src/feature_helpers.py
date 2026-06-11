@@ -133,12 +133,64 @@ def run_yolo_on_image(img_or_path: Any, model_name: str = "yolov5s") -> List[Dic
     # accept path or numpy
     if isinstance(img_or_path, str):
         results = model(img_or_path)
-        df = results.pandas().xyxy[0]
         img = read_image_local(img_or_path)
     else:
         results = model(img_or_path)
-        df = results.pandas().xyxy[0]
         img = img_or_path
+
+    # ultralytics YOLO may return a list of Results or a Results object; yolov5 returns an object
+    df = None
+    try:
+        # yolov5-style: results.pandas().xyxy[0]
+        df = results.pandas().xyxy[0]
+    except Exception:
+        try:
+            # ultralytics-style: results may be a list; take first element and access boxes
+            res0 = results[0] if isinstance(results, (list, tuple)) else results
+            boxes = getattr(res0, 'boxes', None)
+            if boxes is not None:
+                xyxy = getattr(boxes, 'xyxy', None)
+                conf = getattr(boxes, 'conf', None)
+                cls = getattr(boxes, 'cls', None)
+                names = getattr(res0, 'names', None)
+
+                records = []
+                if xyxy is not None:
+                    try:
+                        arr = xyxy.cpu().numpy()
+                    except Exception:
+                        try:
+                            arr = xyxy.numpy()
+                        except Exception:
+                            arr = list(xyxy)
+                    try:
+                        conf_arr = conf.cpu().numpy() if hasattr(conf, 'cpu') else (conf.numpy() if hasattr(conf, 'numpy') else list(conf))
+                    except Exception:
+                        conf_arr = None
+                    try:
+                        cls_arr = cls.cpu().numpy() if hasattr(cls, 'cpu') else (cls.numpy() if hasattr(cls, 'numpy') else list(cls))
+                    except Exception:
+                        cls_arr = None
+
+                    for i, box in enumerate(arr):
+                        x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+                        conf_val = float(conf_arr[i]) if conf_arr is not None else None
+                        cls_val = int(cls_arr[i]) if cls_arr is not None else None
+                        label = None
+                        if names is not None and cls_val is not None:
+                            try:
+                                label = names[int(cls_val)]
+                            except Exception:
+                                label = str(cls_val)
+                        records.append({'xmin': x1, 'ymin': y1, 'xmax': x2, 'ymax': y2, 'confidence': conf_val, 'name': label})
+                import pandas as _pd
+                df = _pd.DataFrame(records)
+        except Exception:
+            df = None
+
+    if df is None:
+        # no detections or unsupported result format
+        return []
 
     recs = []
     for _, row in df.iterrows():
@@ -151,8 +203,8 @@ def run_yolo_on_image(img_or_path: Any, model_name: str = "yolov5s") -> List[Dic
             if x2c > x1c and y2c > y1c:
                 crop = img[y1c:y2c, x1c:x2c]
         recs.append({
-            "label": row["name"],
-            "conf": float(row["confidence"]),
+            "label": row.get("name"),
+            "conf": float(row.get("confidence")) if row.get("confidence") is not None else None,
             "bbox": [x1, y1, x2, y2],
             "crop": crop,
         })
