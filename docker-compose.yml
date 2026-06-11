@@ -28,8 +28,6 @@ services:
     volumes:
       - ./data:/workspace/data
       - ./src:/workspace/src
-    environment:
-      - PYTHONPATH=/workspace:/workspace/src
     command: >
       bash -c "start-master.sh && tail -f /dev/null"
 
@@ -44,8 +42,6 @@ services:
     volumes:
       - ./data:/workspace/data
       - ./src:/workspace/src
-    environment:
-      - PYTHONPATH=/workspace:/workspace/src
     deploy:
       resources:
         reservations:
@@ -67,8 +63,6 @@ services:
     volumes:
       - ./data:/workspace/data
       - ./src:/workspace/src
-    environment:
-      - PYTHONPATH=/workspace:/workspace/src
     deploy:
       resources:
         reservations:
@@ -90,8 +84,6 @@ services:
     volumes:
       - ./data:/workspace/data
       - ./src:/workspace/src
-    environment:
-      - PYTHONPATH=/workspace:/workspace/src
     deploy:
       resources:
         reservations:
