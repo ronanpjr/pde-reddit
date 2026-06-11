@@ -17,40 +17,50 @@ _text_model = None
 def get_yolo(model_name: str = "yolov5s"):
     global _yolo
     if _yolo is None:
-        # lazy import to avoid heavy imports at module load in driver
-        # Try to support multiple YOLO loaders / package APIs (yolov5, ultralytics, etc.)
+        # Deterministic loader: prefer ultralytics, otherwise try yolov5.load
+        loaded = False
         try:
-            # yolov5 python package exposes load
-            from yolov5 import load as yolo_load
+            # Prefer ultralytics if available
+            from ultralytics import YOLO
+
             try:
-                _yolo = yolo_load(model_name, pretrained=True)
+                _yolo = YOLO(model_name)
             except TypeError:
-                # older/newer API may not accept pretrained kwarg
-                _yolo = yolo_load(model_name)
+                _yolo = YOLO(weights=model_name)
+            print(f"[feature_helpers] Loaded ultralytics YOLO for '{model_name}'")
+            loaded = True
         except Exception:
+            # ultralytics not available or failed; try yolov5.load with signature check
             try:
-                # ultralytics package uses YOLO class
-                from ultralytics import YOLO
+                from yolov5 import load as yolo_load
+                import inspect
 
                 try:
-                    _yolo = YOLO(model_name)
-                except TypeError:
-                    # some wrappers expect weights=...
-                    _yolo = YOLO(weights=model_name)
-            except Exception:
-                # Could not load any YOLO implementation; leave _yolo as None
-                _yolo = None
-                try:
-                    print(f"[feature_helpers] WARNING: failed to import yolov5 or ultralytics YOLO for model_name='{model_name}'.")
-                except Exception:
-                    pass
+                    sig = inspect.signature(yolo_load)
+                    if 'pretrained' in sig.parameters:
+                        try:
+                            _yolo = yolo_load(model_name, pretrained=True)
+                        except Exception:
+                            # fallback to calling without the kwarg
+                            _yolo = yolo_load(model_name)
+                    else:
+                        _yolo = yolo_load(model_name)
+                    print(f"[feature_helpers] Loaded yolov5 loader for '{model_name}'")
+                    loaded = True
+                except Exception as e_sig:
+                    print(f"[feature_helpers] WARNING: yolov5.load signature/call failed: {e_sig}")
+            except Exception as e_y5:
+                print(f"[feature_helpers] WARNING: yolov5 import failed: {e_y5}")
 
-        # If model loaded, tune default confidence
+        if not loaded:
+            _yolo = None
+            print(f"[feature_helpers] WARNING: could not load any YOLO implementation for '{model_name}'. YOLO features will be skipped.")
+
+        # tune default confidence where supported
         if _yolo is not None:
             try:
                 _yolo.conf = 0.25
             except Exception:
-                # some model objects don't expose conf attribute
                 pass
     return _yolo
 
