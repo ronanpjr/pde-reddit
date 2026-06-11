@@ -34,3 +34,6 @@ RUN pip install --no-cache-dir \
     mtcnn
 
 WORKDIR /workspace
+# Copy source and install as package so Spark workers can import modules
+COPY src /workspace/src
+RUN pip install --no-cache-dir /workspace/src
