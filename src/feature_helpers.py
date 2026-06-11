@@ -14,6 +14,10 @@ _fer = None
 _text_model = None
 
 
+def _to_local_path(path: str) -> str:
+    return path.replace("file://", "").replace("file:", "") if isinstance(path, str) else path
+
+
 def get_yolo(model_name: str = "yolov5s"):
     global _yolo
     if _yolo is not None:
@@ -113,46 +117,43 @@ def get_text_model(model_name: str = "all-MiniLM-L6-v2"):
 
 def read_image_local(path: str) -> Optional[np.ndarray]:
     try:
-        local = path.replace("file://", "").replace("file:", "")
+        local = _to_local_path(path)
         img = cv2.imread(local)
         return img
     except Exception:
         return None
 
 
-def run_yolo_on_image(img_or_path: Any, model_name: str = "yolov5s") -> List[Dict[str, Any]]:
-    """Return list of detection dicts: label, conf, bbox (x1,y1,x2,y2) and crop (numpy BGR)"""
-    model = get_yolo(model_name)
-    if model is None:
-        # YOLO failed to load; inform and return no detections
-        try:
-            print(f"[feature_helpers] INFO: YOLO model not available for model_name='{model_name}'. Skipping object detection for this image.")
-        except Exception:
-            pass
-        return []
-    # accept path or numpy
-    if isinstance(img_or_path, str):
-        results = model(img_or_path)
-        img = read_image_local(img_or_path)
-    else:
-        results = model(img_or_path)
-        img = img_or_path
+def save_crop_image(crop: Optional[np.ndarray], image_path: str, detection_id: int, crops_root: str = "/workspace/data/output/crops") -> Optional[str]:
+    if crop is None:
+        return None
+    try:
+        local = _to_local_path(image_path)
+        subreddit = os.path.basename(os.path.dirname(local)) or "unknown"
+        filename = os.path.basename(local)
+        stem, _ = os.path.splitext(filename)
+        out_dir = os.path.join(crops_root, subreddit)
+        os.makedirs(out_dir, exist_ok=True)
+        out_path = os.path.join(out_dir, f"{stem}__det_{detection_id}.jpg")
+        ok = cv2.imwrite(out_path, crop)
+        return out_path if ok else None
+    except Exception:
+        return None
 
-    # ultralytics YOLO may return a list of Results or a Results object; yolov5 returns an object
+
+def _parse_yolo_results(results: Any, img: Optional[np.ndarray]) -> List[Dict[str, Any]]:
     df = None
     try:
-        # yolov5-style: results.pandas().xyxy[0]
         df = results.pandas().xyxy[0]
     except Exception:
         try:
-            # ultralytics-style: results may be a list; take first element and access boxes
             res0 = results[0] if isinstance(results, (list, tuple)) else results
-            boxes = getattr(res0, 'boxes', None)
+            boxes = getattr(res0, "boxes", None)
             if boxes is not None:
-                xyxy = getattr(boxes, 'xyxy', None)
-                conf = getattr(boxes, 'conf', None)
-                cls = getattr(boxes, 'cls', None)
-                names = getattr(res0, 'names', None)
+                xyxy = getattr(boxes, "xyxy", None)
+                conf = getattr(boxes, "conf", None)
+                cls = getattr(boxes, "cls", None)
+                names = getattr(res0, "names", None)
 
                 records = []
                 if xyxy is not None:
@@ -164,11 +165,11 @@ def run_yolo_on_image(img_or_path: Any, model_name: str = "yolov5s") -> List[Dic
                         except Exception:
                             arr = list(xyxy)
                     try:
-                        conf_arr = conf.cpu().numpy() if hasattr(conf, 'cpu') else (conf.numpy() if hasattr(conf, 'numpy') else list(conf))
+                        conf_arr = conf.cpu().numpy() if hasattr(conf, "cpu") else (conf.numpy() if hasattr(conf, "numpy") else list(conf))
                     except Exception:
                         conf_arr = None
                     try:
-                        cls_arr = cls.cpu().numpy() if hasattr(cls, 'cpu') else (cls.numpy() if hasattr(cls, 'numpy') else list(cls))
+                        cls_arr = cls.cpu().numpy() if hasattr(cls, "cpu") else (cls.numpy() if hasattr(cls, "numpy") else list(cls))
                     except Exception:
                         cls_arr = None
 
@@ -182,14 +183,14 @@ def run_yolo_on_image(img_or_path: Any, model_name: str = "yolov5s") -> List[Dic
                                 label = names[int(cls_val)]
                             except Exception:
                                 label = str(cls_val)
-                        records.append({'xmin': x1, 'ymin': y1, 'xmax': x2, 'ymax': y2, 'confidence': conf_val, 'name': label})
+                        records.append({"xmin": x1, "ymin": y1, "xmax": x2, "ymax": y2, "confidence": conf_val, "name": label})
                 import pandas as _pd
+
                 df = _pd.DataFrame(records)
         except Exception:
             df = None
 
     if df is None:
-        # no detections or unsupported result format
         return []
 
     recs = []
@@ -202,13 +203,96 @@ def run_yolo_on_image(img_or_path: Any, model_name: str = "yolov5s") -> List[Dic
             x2c, y2c = min(w, x2), min(h, y2)
             if x2c > x1c and y2c > y1c:
                 crop = img[y1c:y2c, x1c:x2c]
-        recs.append({
-            "label": row.get("name"),
-            "conf": float(row.get("confidence")) if row.get("confidence") is not None else None,
-            "bbox": [x1, y1, x2, y2],
-            "crop": crop,
-        })
+        recs.append(
+            {
+                "label": row.get("name"),
+                "conf": float(row.get("confidence")) if row.get("confidence") is not None else None,
+                "bbox": [x1, y1, x2, y2],
+                "crop": crop,
+            }
+        )
     return recs
+
+
+def run_yolo_on_image_with_fallback(
+    img_or_path: Any,
+    model_name: str = "yolov5n",
+    prefer_gpu: bool = True,
+    oom_fallback_to_cpu: bool = True,
+) -> Dict[str, Any]:
+    model = get_yolo(model_name)
+    if model is None:
+        return {"detections": [], "status": "yolo_unavailable", "error": "yolo_model_not_loaded"}
+
+    if isinstance(img_or_path, str):
+        img = read_image_local(img_or_path)
+        source = img_or_path
+    else:
+        img = img_or_path
+        source = img_or_path
+
+    def _infer(device_arg: Optional[str]):
+        if device_arg is None:
+            return model(source)
+        try:
+            return model(source, device=device_arg)
+        except TypeError:
+            return model(source)
+
+    gpu_allowed = prefer_gpu and torch.cuda.is_available()
+    try:
+        if gpu_allowed:
+            results = _infer("0")
+            return {"detections": _parse_yolo_results(results, img), "status": "gpu", "error": None}
+        results = _infer(None)
+        return {"detections": _parse_yolo_results(results, img), "status": "cpu", "error": None}
+    except torch.cuda.OutOfMemoryError as oom_exc:
+        if not oom_fallback_to_cpu:
+            return {"detections": [], "status": "oom", "error": str(oom_exc)}
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+        try:
+            try:
+                model.to("cpu")
+            except Exception:
+                pass
+            results = _infer("cpu")
+            return {
+                "detections": _parse_yolo_results(results, img),
+                "status": "cpu_fallback_after_oom",
+                "error": str(oom_exc),
+            }
+        except Exception as cpu_exc:
+            return {"detections": [], "status": "oom_fallback_failed", "error": f"{oom_exc}; cpu_retry={cpu_exc}"}
+    except Exception as exc:
+        msg = str(exc)
+        if oom_fallback_to_cpu and "CUDA out of memory" in msg:
+            try:
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
+            try:
+                try:
+                    model.to("cpu")
+                except Exception:
+                    pass
+                results = _infer("cpu")
+                return {
+                    "detections": _parse_yolo_results(results, img),
+                    "status": "cpu_fallback_after_oom",
+                    "error": msg,
+                }
+            except Exception as cpu_exc:
+                return {"detections": [], "status": "oom_fallback_failed", "error": f"{msg}; cpu_retry={cpu_exc}"}
+        return {"detections": [], "status": "yolo_error", "error": msg}
+
+
+def run_yolo_on_image(img_or_path: Any, model_name: str = "yolov5s") -> List[Dict[str, Any]]:
+    """Return list of detection dicts: label, conf, bbox (x1,y1,x2,y2) and crop (numpy BGR)"""
+    out = run_yolo_on_image_with_fallback(img_or_path, model_name=model_name, prefer_gpu=True, oom_fallback_to_cpu=False)
+    return out.get("detections", [])
 
 
 def color_stats_from_crop(crop: Optional[np.ndarray]) -> Dict[str, float]:
@@ -330,3 +414,124 @@ def safe_extract_features(image_path: str, model_name: str = "yolov5s", easyocr_
     except Exception as e:
         records.append({"image_path": image_path, "error": str(e), "traceback": traceback.format_exc()})
     return records
+
+
+def safe_extract_stage_a(
+    image_path: str,
+    model_name: str = "yolov5n",
+    crops_root: str = "/workspace/data/output/crops",
+    prefer_gpu: bool = True,
+    oom_fallback_to_cpu: bool = True,
+) -> List[Dict[str, Any]]:
+    records = []
+    try:
+        img = read_image_local(image_path)
+        yolo_out = run_yolo_on_image_with_fallback(
+            img if img is not None else image_path,
+            model_name=model_name,
+            prefer_gpu=prefer_gpu,
+            oom_fallback_to_cpu=oom_fallback_to_cpu,
+        )
+        dets = yolo_out.get("detections", [])
+        yolo_status = yolo_out.get("status")
+        yolo_error = yolo_out.get("error")
+
+        if dets:
+            for i, d in enumerate(dets):
+                crop = d.get("crop")
+                crop_path = save_crop_image(crop, image_path=image_path, detection_id=i, crops_root=crops_root)
+                cstats = color_stats_from_crop(crop)
+                fer_res = run_fer_on_crop(crop)
+                rec = {
+                    "image_path": image_path,
+                    "detection_id": i,
+                    "label": d.get("label"),
+                    "conf": d.get("conf"),
+                    "bbox": d.get("bbox"),
+                    "crop_path": crop_path,
+                    "status": "ok" if yolo_status in ("gpu", "cpu") else yolo_status,
+                }
+                if yolo_error:
+                    rec["yolo_error"] = yolo_error
+                rec.update(cstats)
+                rec.update(fer_res if isinstance(fer_res, dict) else {})
+                records.append(rec)
+        else:
+            rec = {
+                "image_path": image_path,
+                "detection_id": -1,
+                "label": None,
+                "conf": None,
+                "bbox": None,
+                "crop_path": None,
+                "status": yolo_status or "no_detections",
+            }
+            if yolo_error:
+                rec["yolo_error"] = yolo_error
+            records.append(rec)
+    except Exception as e:
+        records.append({"image_path": image_path, "status": "stage_a_error", "error": str(e), "traceback": traceback.format_exc()})
+    return records
+
+
+def enrich_stage_a_records_with_text(
+    image_path: str,
+    filename: str,
+    stage_a_records: List[Dict[str, Any]],
+    easyocr_model_dir: str = "/workspace/data/easyocr_models",
+    easyocr_download: bool = False,
+) -> List[Dict[str, Any]]:
+    out = []
+    try:
+        ocr_global = run_easyocr_on_array_or_path(
+            image_path,
+            model_storage_directory=easyocr_model_dir,
+            gpu=torch.cuda.is_available(),
+            download_enabled=easyocr_download,
+            detail=1,
+        )
+        ocr_global_text = " ".join([r[1] for r in ocr_global]) if ocr_global else ""
+    except Exception:
+        ocr_global_text = ""
+
+    for rec in stage_a_records:
+        try:
+            crop_path = rec.get("crop_path")
+            ocr_crop = []
+            if crop_path:
+                crop = cv2.imread(crop_path)
+                if crop is not None:
+                    ocr_crop = run_easyocr_on_array_or_path(
+                        crop,
+                        model_storage_directory=easyocr_model_dir,
+                        gpu=torch.cuda.is_available(),
+                        download_enabled=easyocr_download,
+                        detail=1,
+                    )
+            ocr_text = " ".join([r[1] for r in ocr_crop]) if ocr_crop else ""
+            text_for_emb = ocr_text or ocr_global_text or rec.get("label") or filename or os.path.basename(_to_local_path(image_path))
+            emb = text_to_embedding(text_for_emb)
+
+            full = dict(rec)
+            full.update(
+                {
+                    "ocr_text": ocr_text,
+                    "ocr_global_text": ocr_global_text,
+                    "embedding": emb,
+                }
+            )
+            out.append(full)
+        except Exception as e:
+            errored = dict(rec)
+            errored.update(
+                {
+                    "ocr_text": "",
+                    "ocr_global_text": ocr_global_text,
+                    "embedding": text_to_embedding(rec.get("label") or filename or ""),
+                    "status": "stage_b_error",
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                }
+            )
+            out.append(errored)
+    return out
